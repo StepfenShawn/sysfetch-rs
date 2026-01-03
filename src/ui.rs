@@ -153,6 +153,26 @@ fn draw_all_system_info(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         Span::raw(&info.local_ip),
     ]));
 
+    text.push(Line::from(vec![
+        Span::styled(
+            " 🐚 Shell: ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(&info.shell),
+    ]));
+
+    text.push(Line::from(vec![
+        Span::styled(
+            " 📟 Terminal: ",
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(&info.terminal),
+    ]));
+
     let memory_percent = if info.memory_total > 0 {
         (info.memory_used as f64 / info.memory_total as f64 * 100.0) as u16
     } else {

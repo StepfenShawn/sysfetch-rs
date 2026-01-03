@@ -10,7 +10,7 @@ pub struct App {
 impl App {
     pub fn new() -> AppResult<Self> {
         let system_info = SystemInfo::collect()?;
-      
+
         Ok(Self {
             system_info,
             should_quit: false,
