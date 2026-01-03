@@ -4,6 +4,21 @@ use std::env;
 use std::process::Command;
 use sysinfo::System;
 
+/// CPU information structure
+#[derive(Debug, Clone)]
+pub struct CpuInfo {
+    pub model: String,
+    pub cores: usize,
+    pub frequency: u64, // MHz
+}
+
+/// GPU information structure
+#[derive(Debug, Clone)]
+pub struct GpuInfo {
+    pub name: String,
+    pub vendor: String,
+}
+
 /// System information structure
 #[derive(Debug, Clone)]
 pub struct SystemInfo {
@@ -13,13 +28,12 @@ pub struct SystemInfo {
     pub hostname: String,
     pub username: String,
     pub uptime: String,
-    pub cpu_model: String,
-    pub cpu_cores: usize,
+    pub cpus: Vec<CpuInfo>,
     pub memory_total: u64,
     pub memory_used: u64,
     pub disk_total: u64,
     pub disk_used: u64,
-    pub gpu_info: String,
+    pub gpus: Vec<GpuInfo>,
     pub local_ip: String,
 }
 
@@ -43,12 +57,7 @@ impl SystemInfo {
         let uptime = format_uptime(uptime_seconds);
 
         // CPU information
-        let cpu_model = sys
-            .cpus()
-            .first()
-            .map(|cpu| cpu.brand().to_string())
-            .unwrap_or_else(|| "Unknown".to_string());
-        let cpu_cores = sys.cpus().len();
+        let cpus = collect_cpu_info(&sys);
 
         // Memory information
         let memory_total = sys.total_memory();
@@ -59,7 +68,7 @@ impl SystemInfo {
         let disk_used = 0u64;
 
         // GPU information
-        let gpu_info = get_gpu_info();
+        let gpus = get_gpu_info_list();
 
         // Local IP address
         let local_ip = get_local_ip();
@@ -71,13 +80,12 @@ impl SystemInfo {
             hostname,
             username,
             uptime,
-            cpu_model,
-            cpu_cores,
+            cpus,
             memory_total,
             memory_used,
             disk_total,
             disk_used,
-            gpu_info,
+            gpus,
             local_ip,
         })
     }
@@ -124,7 +132,7 @@ mod tests {
     fn test_system_info_collection() {
         let info = SystemInfo::collect().unwrap();
         assert!(!info.os_name.is_empty());
-        assert!(info.cpu_cores > 0);
+        assert!(!info.cpus.is_empty());
     }
 
     #[test]
@@ -142,85 +150,179 @@ mod tests {
     }
 }
 
-/// Get GPU information
-fn get_gpu_info() -> String {
-    // Use different commands to get GPU information based on the operating system
+/// Collect CPU information
+fn collect_cpu_info(sys: &System) -> Vec<CpuInfo> {
+    let mut cpu_map = std::collections::HashMap::new();
+
+    // Group CPUs by model to handle multi-core processors
+    for cpu in sys.cpus() {
+        let model = cpu.brand().to_string();
+        let frequency = cpu.frequency();
+
+        let entry = cpu_map.entry(model.clone()).or_insert(CpuInfo {
+            model,
+            cores: 0,
+            frequency,
+        });
+        entry.cores += 1;
+    }
+
+    cpu_map.into_values().collect()
+}
+
+/// Get GPU information list
+fn get_gpu_info_list() -> Vec<GpuInfo> {
     if cfg!(target_os = "windows") {
-        get_gpu_info_windows()
+        get_gpu_info_windows_list()
     } else if cfg!(target_os = "linux") {
-        get_gpu_info_linux()
+        get_gpu_info_linux_list()
     } else if cfg!(target_os = "macos") {
-        get_gpu_info_macos()
+        get_gpu_info_macos_list()
     } else {
-        "Unknown GPU".to_string()
+        vec![GpuInfo {
+            name: "Unknown GPU".to_string(),
+            vendor: "Unknown".to_string(),
+        }]
     }
 }
 
-/// Get GPU information on Windows system
-fn get_gpu_info_windows() -> String {
+/// Get GPU information on Windows system (multiple GPUs)
+fn get_gpu_info_windows_list() -> Vec<GpuInfo> {
+    let mut gpus = Vec::new();
+
     match Command::new("wmic")
         .args(&[
             "path",
             "win32_VideoController",
             "get",
-            "name",
+            "name,AdapterCompatibility",
             "/format:value",
         ])
         .output()
     {
         Ok(output) => {
             let output_str = String::from_utf8_lossy(&output.stdout);
+            let mut current_gpu = GpuInfo {
+                name: String::new(),
+                vendor: String::new(),
+            };
+
             for line in output_str.lines() {
-                if line.starts_with("Name=") && !line.trim_end_matches("Name=").is_empty() {
-                    return line.trim_start_matches("Name=").trim().to_string();
+                let line = line.trim();
+                if line.starts_with("AdapterCompatibility=")
+                    && !line.trim_end_matches("AdapterCompatibility=").is_empty()
+                {
+                    current_gpu.vendor = line
+                        .trim_start_matches("AdapterCompatibility=")
+                        .trim()
+                        .to_string();
+                } else if line.starts_with("Name=") && !line.trim_end_matches("Name=").is_empty() {
+                    current_gpu.name = line.trim_start_matches("Name=").trim().to_string();
+
+                    // If we have both name and vendor, add to list
+                    if !current_gpu.name.is_empty() {
+                        gpus.push(current_gpu.clone());
+                        current_gpu = GpuInfo {
+                            name: String::new(),
+                            vendor: String::new(),
+                        };
+                    }
                 }
             }
-            "Unknown GPU".to_string()
         }
-        Err(_) => "Unknown GPU".to_string(),
+        Err(_) => {}
     }
+
+    if gpus.is_empty() {
+        gpus.push(GpuInfo {
+            name: "Unknown GPU".to_string(),
+            vendor: "Unknown".to_string(),
+        });
+    }
+
+    gpus
 }
 
-/// Get GPU information on Linux system
-fn get_gpu_info_linux() -> String {
-    // Try using lspci command
+/// Get GPU information on Linux system (multiple GPUs)
+fn get_gpu_info_linux_list() -> Vec<GpuInfo> {
+    let mut gpus = Vec::new();
+
     match Command::new("lspci").args(&["-mm"]).output() {
         Ok(output) => {
             let output_str = String::from_utf8_lossy(&output.stdout);
             for line in output_str.lines() {
                 if line.contains("VGA compatible controller") || line.contains("3D controller") {
-                    // Parse lspci output and extract GPU name
                     let parts: Vec<&str> = line.split('"').collect();
                     if parts.len() >= 6 {
-                        return format!("{} {}", parts[3], parts[5]);
+                        gpus.push(GpuInfo {
+                            name: format!("{} {}", parts[3], parts[5]),
+                            vendor: parts[3].to_string(),
+                        });
                     }
                 }
             }
-            "Unknown GPU".to_string()
         }
-        Err(_) => "Unknown GPU".to_string(),
+        Err(_) => {}
     }
+
+    if gpus.is_empty() {
+        gpus.push(GpuInfo {
+            name: "Unknown GPU".to_string(),
+            vendor: "Unknown".to_string(),
+        });
+    }
+
+    gpus
 }
 
-/// Get GPU information on macOS system
-fn get_gpu_info_macos() -> String {
+/// Get GPU information on macOS system (multiple GPUs)
+fn get_gpu_info_macos_list() -> Vec<GpuInfo> {
+    let mut gpus = Vec::new();
+
     match Command::new("system_profiler")
         .args(&["SPDisplaysDataType", "-json"])
         .output()
     {
         Ok(output) => {
             let output_str = String::from_utf8_lossy(&output.stdout);
-            // Simple parsing to find GPU name
-            if let Some(start) = output_str.find("\"_name\" : \"") {
-                let start = start + 11;
+
+            // Simple parsing to find all GPU names
+            let mut pos = 0;
+            while let Some(start) = output_str[pos..].find("\"_name\" : \"") {
+                let start = pos + start + 11;
                 if let Some(end) = output_str[start..].find('"') {
-                    return output_str[start..start + end].to_string();
+                    let gpu_name = output_str[start..start + end].to_string();
+                    gpus.push(GpuInfo {
+                        name: gpu_name.clone(),
+                        vendor: if gpu_name.to_lowercase().contains("nvidia") {
+                            "NVIDIA".to_string()
+                        } else if gpu_name.to_lowercase().contains("amd")
+                            || gpu_name.to_lowercase().contains("radeon")
+                        {
+                            "AMD".to_string()
+                        } else if gpu_name.to_lowercase().contains("intel") {
+                            "Intel".to_string()
+                        } else {
+                            "Unknown".to_string()
+                        },
+                    });
+                    pos = start + end;
+                } else {
+                    break;
                 }
             }
-            "Unknown GPU".to_string()
         }
-        Err(_) => "Unknown GPU".to_string(),
+        Err(_) => {}
     }
+
+    if gpus.is_empty() {
+        gpus.push(GpuInfo {
+            name: "Unknown GPU".to_string(),
+            vendor: "Unknown".to_string(),
+        });
+    }
+
+    gpus
 }
 
 /// Get local IP address
