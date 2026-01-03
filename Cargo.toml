@@ -1,10 +1,11 @@
 [package]
 name = "rsysfetch"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Yet another system information command tool simply implemented in Rust🦀 with ratatui."
 authors = ["Stepfen Shawn"]
 license = "MIT"
+repository = "https://github.com/StepfenShawn/rsysfetch"
 
 [dependencies]
 ratatui = "0.25"

@@ -6,6 +6,7 @@ Yet another system information command tool simply implemented in Rust🦀 with 
 # Usage
 ```
 cargo install rsysfetch
+rsysfetch
 ```
 
 enjoy it!  

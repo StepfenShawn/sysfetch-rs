@@ -91,7 +91,7 @@ fn draw_all_system_info(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     for (i, cpu) in info.cpus.iter().enumerate() {
         if i == 0 {
             text.push(Line::from(Span::styled(
-                "  CPUs",
+                " 🔥 CPUs",
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -123,7 +123,7 @@ fn draw_all_system_info(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     for (i, gpu) in info.gpus.iter().enumerate() {
         if i == 0 {
             text.push(Line::from(Span::styled(
-                "  GPUs",
+                " 🎮 GPUs",
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
@@ -145,7 +145,7 @@ fn draw_all_system_info(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
 
     text.push(Line::from(vec![
         Span::styled(
-            "  Local IP: ",
+            " 🌐 Local IP: ",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -160,7 +160,7 @@ fn draw_all_system_info(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
     };
     text.push(Line::from(vec![
         Span::styled(
-            "  Memory: ",
+            " 💾 Memory: ",
             Style::default()
                 .fg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
@@ -177,7 +177,7 @@ fn draw_all_system_info(f: &mut Frame, area: ratatui::layout::Rect, app: &App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title("Environments")
+                .title(" 🖥️  Environments ")
                 .title_alignment(Alignment::Center)
                 .title_style(
                     Style::default()
